@@ -1,0 +1,144 @@
+// Generator Client
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Datasource
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ================= USER & ALAMAT =================
+// Update model Pengguna
+model Pengguna {
+  id          Int      @id @default(autoincrement())
+  nama_lengkap String
+  no_wa       String   @unique
+  password    String
+  
+  // Tambahan Role: DEFAULT user biasa, ADMIN itu Tuan Toko
+  role        String   @default("USER") // "USER" atau "ADMIN"
+  
+  dibuat_pada DateTime @default(now())
+  daftar_alamat  Alamat[]
+  daftar_pesanan Pesanan[]
+
+  @@map("pengguna")
+}
+
+model Alamat {
+  id             Int     @id @default(autoincrement())
+  id_pengguna    Int
+  pengguna       Pengguna @relation(fields: [id_pengguna], references: [id], onDelete: Cascade)
+  
+  label_alamat   String   // "Rumah", "Toko"
+  nama_penerima  String
+  no_hp_penerima String
+  alamat_lengkap String   @db.Text
+  
+  id_wilayah     Int
+  wilayah        WilayahPengiriman @relation(fields: [id_wilayah], references: [id])
+  
+  utama          Boolean  @default(false)
+
+  @@map("alamat")
+}
+
+model WilayahPengiriman {
+  id             Int    @id @default(autoincrement())
+  nama_kecamatan String
+  biaya_ongkir   Int
+
+  daftar_alamat  Alamat[]
+  daftar_pesanan Pesanan[]
+
+  @@map("wilayah_pengiriman")
+}
+
+// ================= PRODUK & KATEGORI =================
+model Kategori {
+  id           Int      @id @default(autoincrement())
+  nama_kategori String  @unique
+  daftar_produk Produk[]
+
+  @@map("kategori")
+}
+
+model Produk {
+  id          Int      @id @default(autoincrement())
+  id_kategori Int
+  kategori    Kategori @relation(fields: [id_kategori], references: [id])
+  
+  nama_produk String
+  deskripsi   String?  @db.Text
+  url_gambar  String?
+  aktif       Boolean  @default(true)
+
+  daftar_varian VarianSatuan[]
+
+  @@map("produk")
+}
+
+model VarianSatuan {
+  id          Int     @id @default(autoincrement())
+  id_produk   Int
+  produk      Produk  @relation(fields: [id_produk], references: [id], onDelete: Cascade)
+  
+  nama_satuan String  // "Pcs", "Dus"
+  harga       Int
+  barcode     String?
+
+  item_pesanan ItemPesanan[]
+
+  @@map("varian_satuan")
+}
+
+// ================= TRANSAKSI =================
+// Update model Pesanan
+model Pesanan {
+  id               Int      @id @default(autoincrement())
+  nomor_nota       String   @unique
+  id_pengguna      Int
+  pengguna         Pengguna @relation(fields: [id_pengguna], references: [id])
+  
+  jenis_pengiriman String   // "AMBIL_SENDIRI" | "DIANTAR"
+  
+  // === UPDATE DISINI ===
+  metode_pembayaran String  // "COD" atau "TRANSFER"
+  bukti_bayar       String? // URL Gambar (Jika Transfer)
+  // =====================
+
+  id_wilayah       Int?
+  wilayah          WilayahPengiriman? @relation(fields: [id_wilayah], references: [id])
+  
+  alamat_tujuan    String?  @db.Text
+  nama_penerima    String?
+  
+  sub_total        Int
+  biaya_ongkir     Int      @default(0)
+  total_bayar      Int
+  
+  status           String   @default("MENUNGGU") 
+  catatan_admin    String?  @db.Text
+  
+  dibuat_pada      DateTime @default(now())
+  daftar_item      ItemPesanan[]
+
+  @@map("pesanan")
+}
+
+model ItemPesanan {
+  id               Int @id @default(autoincrement())
+  id_pesanan       Int
+  pesanan          Pesanan @relation(fields: [id_pesanan], references: [id], onDelete: Cascade)
+  
+  id_varian_satuan Int
+  varian           VarianSatuan @relation(fields: [id_varian_satuan], references: [id])
+  
+  jumlah           Int
+  harga_saat_beli  Int
+  total_per_item   Int 
+
+  @@map("item_pesanan")
+}
