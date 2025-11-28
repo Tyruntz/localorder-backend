@@ -3,30 +3,39 @@ const prisma = require('../config/prisma');
 // AMBIL SEMUA PRODUK (Bisa Filter by Kategori)
 exports.getProducts = async (req, res) => {
   try {
-    // Ambil parameter dari URL
-    // Contoh: ?kategoriId=1 & search=indomie & showAll=true
-    const { kategoriId, search, showAll } = req.query; 
+    const { kategoriId, search, showAll } = req.query;
 
+    // 1. DEBUGGING LOG (Cek di Railway Logs nanti)
+    console.log(">>> REQUEST MASUK:", { kategoriId, search, showAll });
+
+    // 2. BANGUN QUERY SECARA DINAMIS (Cara paling aman)
+    const filterQuery = {};
+
+    // Logic: Kalau showAll BUKAN 'true', maka paksa filter aktif = true.
+    // Kalau showAll == 'true', filter ini jangan dimasukkan sama sekali.
+    if (showAll !== 'true') {
+      filterQuery.aktif = true;
+    }
+
+    if (kategoriId) {
+      filterQuery.id_kategori = parseInt(kategoriId);
+    }
+
+    if (search) {
+      filterQuery.nama_produk = { contains: search };
+    }
+
+    console.log(">>> FILTER DATABASE:", filterQuery);
+
+    // 3. EKSEKUSI PRISMA
     const products = await prisma.produk.findMany({
-      where: {
-        // 1. LOGIKA STATUS AKTIF/NON-AKTIF
-        // Jika showAll='true' (Request dari Admin), ambil semua (undefined = ignore filter).
-        // Jika tidak (Request dari User Toko), hanya ambil yang aktif: true.
-        aktif: showAll === 'true' ? undefined : true,
-        
-        // 2. LOGIKA KATEGORI
-        id_kategori: kategoriId ? parseInt(kategoriId) : undefined,
-        
-        // 3. LOGIKA PENCARIAN (Search)
-        // Mencari produk yang namanya mengandung kata kunci
-        nama_produk: search ? { contains: search } : undefined
-      },
+      where: filterQuery, // Masukkan object yang kita susun tadi
       include: {
-        kategori: true,        // Sertakan data kategori
-        daftar_varian: true    // Sertakan harga varian
+        kategori: true,
+        daftar_varian: true
       },
       orderBy: {
-        nama_produk: 'asc'     // Urutkan A-Z biar rapi
+        nama_produk: 'asc'
       }
     });
 
@@ -36,6 +45,7 @@ exports.getProducts = async (req, res) => {
       data: products
     });
   } catch (error) {
+    console.error("ERROR GET PRODUCTS:", error);
     res.status(500).json({ message: error.message });
   }
 };
