@@ -3,22 +3,36 @@ const prisma = require('../config/prisma');
 // AMBIL SEMUA PRODUK (Bisa Filter by Kategori)
 exports.getProducts = async (req, res) => {
   try {
-    const { kategoriId } = req.query; // Ambil dari URL ?kategoriId=1
+    // Ambil parameter dari URL
+    // Contoh: ?kategoriId=1 & search=indomie & showAll=true
+    const { kategoriId, search, showAll } = req.query; 
 
     const products = await prisma.produk.findMany({
       where: {
-        aktif: true,
-        // Jika ada kategoriId, filter. Jika tidak, ambil semua.
-        id_kategori: kategoriId ? parseInt(kategoriId) : undefined
+        // 1. LOGIKA STATUS AKTIF/NON-AKTIF
+        // Jika showAll='true' (Request dari Admin), ambil semua (undefined = ignore filter).
+        // Jika tidak (Request dari User Toko), hanya ambil yang aktif: true.
+        aktif: showAll === 'true' ? undefined : true,
+        
+        // 2. LOGIKA KATEGORI
+        id_kategori: kategoriId ? parseInt(kategoriId) : undefined,
+        
+        // 3. LOGIKA PENCARIAN (Search)
+        // Mencari produk yang namanya mengandung kata kunci
+        nama_produk: search ? { contains: search } : undefined
       },
       include: {
         kategori: true,        // Sertakan data kategori
-        daftar_varian: true    // PENTING: Sertakan harga Pcs/Dus
+        daftar_varian: true    // Sertakan harga varian
+      },
+      orderBy: {
+        nama_produk: 'asc'     // Urutkan A-Z biar rapi
       }
     });
 
     res.json({
       success: true,
+      count: products.length,
       data: products
     });
   } catch (error) {
