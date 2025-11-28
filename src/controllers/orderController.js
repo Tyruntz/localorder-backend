@@ -166,12 +166,85 @@ exports.createOrder = async (req, res) => {
   }
 };
 
-// ... (Kode Admin lainnya jangan dihapus, biarkan di bawah sini)
-// Copy paste fungsi getAllOrdersAdmin & updateOrderStatus dari chat sebelumnya ke sini jika belum ada
+// === FITUR ADMIN (LENGKAP) ===
+
+// 1. AMBIL SEMUA PESANAN (Optimized Query)
 exports.getAllOrdersAdmin = async (req, res) => {
-    // ... (Isi fungsi admin)
+  try {
+    const { status } = req.query;
+    
+    // Log biar tau ada yang request
+    console.log("🔍 FETCHING ORDERS ADMIN - Status:", status);
+
+    const orders = await prisma.pesanan.findMany({
+      where: status ? { status: status } : {},
+      // GUNAKAN SELECT (Bukan Include) Biar Ringan & Cepat
+      select: {
+        id: true,
+        nomor_nota: true,
+        dibuat_pada: true,
+        total_bayar: true,
+        status: true,
+        jenis_pengiriman: true,
+        metode_pembayaran: true,
+        sub_total: true,
+        biaya_ongkir: true,
+        alamat_tujuan: true,
+        
+        // Ambil data user seperlunya saja
+        pengguna: {
+          select: {
+            nama_lengkap: true,
+            no_wa: true
+          }
+        },
+        
+        // Ambil item tapi jangan terlalu dalam nested-nya
+        daftar_item: {
+          select: {
+            id: true,
+            jumlah: true,
+            total_per_item: true,
+            harga_saat_beli: true,
+            varian: {
+              select: {
+                nama_satuan: true,
+                produk: {
+                  select: { nama_produk: true }
+                }
+              }
+            }
+          }
+        }
+      },
+      orderBy: { dibuat_pada: 'desc' } // Urutkan dari yang terbaru
+    });
+
+    console.log(`✅ BERHASIL: DITEMUKAN ${orders.length} PESANAN`);
+
+    res.json({ success: true, data: orders });
+  } catch (error) {
+    console.error("❌ ERROR FETCH ORDERS:", error);
+    res.status(500).json({ message: error.message });
+  }
 };
 
+// 2. UPDATE STATUS PESANAN
 exports.updateOrderStatus = async (req, res) => {
-    // ... (Isi fungsi admin)
+  try {
+    const { id } = req.params;
+    const { status, catatan_admin } = req.body;
+
+    const updatedOrder = await prisma.pesanan.update({
+      where: { id: parseInt(id) },
+      data: {
+        status: status,         
+        catatan_admin: catatan_admin 
+      }
+    });
+
+    res.json({ success: true, message: "Status diperbarui", data: updatedOrder });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };
