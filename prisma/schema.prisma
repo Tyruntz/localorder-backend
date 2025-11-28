@@ -16,10 +16,11 @@ model Pengguna {
   nama_lengkap String
   no_wa       String   @unique
   password    String
+  role        String   @default("USER")
   
-  // Tambahan Role: DEFAULT user biasa, ADMIN itu Tuan Toko
-  role        String   @default("USER") // "USER" atau "ADMIN"
-  
+  // Revisi: Fitur Langganan/VIP (Bebas Ongkir)
+  is_vip      Boolean  @default(false) 
+
   dibuat_pada DateTime @default(now())
   daftar_alamat  Alamat[]
   daftar_pesanan Pesanan[]
@@ -86,12 +87,26 @@ model VarianSatuan {
   produk      Produk  @relation(fields: [id_produk], references: [id], onDelete: Cascade)
   
   nama_satuan String  // "Pcs", "Dus"
-  harga       Int
+  harga       Int     // Harga Normal (Beli 1)
   barcode     String?
+
+  // Relasi ke Tabel Harga Grosir (Baru)
+  daftar_grosir HargaGrosir[] 
 
   item_pesanan ItemPesanan[]
 
   @@map("varian_satuan")
+}
+
+model HargaGrosir {
+  id           Int          @id @default(autoincrement())
+  id_varian    Int
+  varian       VarianSatuan @relation(fields: [id_varian], references: [id], onDelete: Cascade)
+  
+  min_qty      Int          // Misal: 3
+  harga_potongan Int      // Misal: 4500 (Harga per item jika beli >= 3)
+
+  @@map("harga_grosir")
 }
 
 // ================= TRANSAKSI =================

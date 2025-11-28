@@ -4,50 +4,78 @@ const prisma = require('../config/prisma');
 exports.calculateCart = async (req, res) => {
   try {
     const { items } = req.body; 
+    const userId = req.user.id; // Ambil ID user dari token
+
+    // 1. Cek Status VIP User
+    const user = await prisma.pengguna.findUnique({ where: { id: userId } });
+    const isVip = user.is_vip; // True/False
 
     let subTotal = 0;
     
-    // Hitung subtotal real-time
+    // 2. HITUNG HARGA (Logika Grosir)
     for (const item of items) {
+      // Ambil data varian DAN aturan grosirnya
       const variant = await prisma.varianSatuan.findUnique({
-        where: { id: item.variantId }
+        where: { id: item.variantId },
+        include: { daftar_grosir: true }
       });
+
       if (variant) {
-        subTotal += variant.harga * item.qty;
+        let hargaFinal = variant.harga; // Default harga normal (5000)
+
+        // Cek apakah jumlah beli memenuhi syarat grosir
+        // Cari aturan grosir yang quantity-nya terpenuhi, ambil yang paling murah
+        // Contoh: Beli 10. Ada aturan Min 3 (@4500) dan Min 12 (@4000).
+        // Karena 10 >= 3 tapi 10 < 12, maka pakai 4500.
+        
+        if (variant.daftar_grosir && variant.daftar_grosir.length > 0) {
+           // Urutkan dari min_qty terbesar ke terkecil
+           const rules = variant.daftar_grosir.sort((a, b) => b.min_qty - a.min_qty);
+           
+           for (const rule of rules) {
+             if (item.qty >= rule.min_qty) {
+               hargaFinal = rule.harga_potongan;
+               break; // Ketemu aturan yang cocok, stop checking
+             }
+           }
+        }
+
+        subTotal += hargaFinal * item.qty;
       }
     }
 
-    // === LOGIKA BARU (BENEDIK REQUEST) ===
-    const minOrder = 400000;
-    const minDelivery = 700000;
+    // 3. LOGIKA MINIMAL BELANJA (Revisi Tuan Toko)
+    // "Minimal 250k untuk diproses"
+    const minBelanja = 250000;
+    const minDelivery = 500000; // Contoh: di atas 500rb baru boleh delivery
 
-    let canCheckout = subTotal >= minOrder;
+    let canCheckout = subTotal >= minBelanja;
     
-    // 1. Defaultnya CUMA boleh AMBIL SENDIRI
-    let availableMethods = ["AMBIL_SENDIRI"];
+    // 4. ATURAN PENGIRIMAN & PEMBAYARAN
+    // Pembayaran: HANYA TRANSFER (Sesuai Memo)
+    let availablePayments = ["TRANSFER"]; 
+
+    let availableShipping = ["AMBIL_SENDIRI"];
     
-    // 2. Jika belanja tembus 700rb, OPSI "DIANTAR" DITAMBAHKAN (Unlocked)
-    // Jadi user punya 2 pilihan: ["AMBIL_SENDIRI", "DIANTAR"]
+    // Logic Delivery
     if (subTotal >= minDelivery) {
-      availableMethods.push("DIANTAR");
+      availableShipping.push("DIANTAR");
     }
 
-    // Buat pesan info untuk Frontend
-    let infoMessage = "";
-    if (subTotal < minDelivery) {
-      infoMessage = `Tambah Rp ${(minDelivery - subTotal).toLocaleString()} lagi agar bisa diantar.`;
-    } else {
-      infoMessage = "Selamat! Anda bisa memilih layanan antar atau ambil sendiri.";
-    }
+    // Logic Ongkir Gratis (VIP atau Jarak Dekat)
+    // Info ini dikirim ke frontend biar frontend tau user ini VIP atau bukan
+    const isFreeShipping = isVip; 
 
     res.json({
       success: true,
       subTotal,
       canCheckout,
-      availableMethods, 
+      availableShipping,
+      availablePayments,
+      isFreeShipping, // Flag buat frontend: Kalau true, set ongkir = 0
       messages: {
-        error: subTotal < minOrder ? `Minimal belanja Rp ${minOrder.toLocaleString()}` : null,
-        info: infoMessage
+        error: subTotal < minBelanja ? `Minimal belanja Rp ${minBelanja.toLocaleString()}` : null,
+        info: isVip ? "Anda Pelanggan VIP! Bebas Ongkir." : null
       }
     });
 

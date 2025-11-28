@@ -118,19 +118,23 @@ exports.uploadImage = async (req, res) => {
 };
 
 // TAMBAH PRODUK BARU
+// src/controllers/productController.js
+
 exports.createProduct = async (req, res) => {
   try {
     const { 
-      nama_produk, 
-      deskripsi, 
-      id_kategori, 
-      url_gambar, 
-      varian 
+      nama_produk, deskripsi, id_kategori, url_gambar, 
+      varian // Array varian sekarang lebih kompleks
     } = req.body;
 
-    if (!varian || varian.length === 0) {
-      return res.status(400).json({ message: "Minimal harus ada 1 varian satuan." });
-    }
+    // Contoh Input Varian dari Frontend nanti:
+    // [
+    //   { 
+    //     name: "Pcs", 
+    //     price: 5000, 
+    //     grosir: [{ min_qty: 3, price: 4500 }] 
+    //   }
+    // ]
 
     const newProduct = await prisma.produk.create({
       data: {
@@ -142,14 +146,25 @@ exports.createProduct = async (req, res) => {
           create: varian.map(v => ({
             nama_satuan: v.name,
             harga: parseInt(v.price),
-            barcode: v.barcode || null
+            barcode: v.barcode || null,
+            // Simpan aturan grosir jika ada
+            daftar_grosir: {
+              create: v.grosir ? v.grosir.map(g => ({
+                min_qty: parseInt(g.min_qty),
+                harga_potongan: parseInt(g.price)
+              })) : []
+            }
           }))
         }
       },
-      include: { daftar_varian: true }
+      include: { 
+        daftar_varian: {
+          include: { daftar_grosir: true } // Return data lengkap
+        } 
+      }
     });
 
-    res.status(201).json({ success: true, message: "Produk berhasil dibuat!", data: newProduct });
+    res.status(201).json({ success: true, message: "Produk & Harga Grosir tersimpan!", data: newProduct });
 
   } catch (error) {
     res.status(500).json({ message: error.message });
