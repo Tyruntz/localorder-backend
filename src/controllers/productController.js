@@ -1,35 +1,50 @@
 const prisma = require('../config/prisma');
+const cloudinary = require('cloudinary').v2;
+const fs = require('fs');
 
-// AMBIL SEMUA PRODUK (Bisa Filter by Kategori)
+// Konfigurasi Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+// ==========================================
+// 1. PUBLIC API (Bisa Diakses User & Admin)
+// ==========================================
+
+// AMBIL SEMUA PRODUK (Logic V2 - Anti Bug)
 exports.getProducts = async (req, res) => {
   try {
     const { kategoriId, search, showAll } = req.query;
 
-    // 1. DEBUGGING LOG (Cek di Railway Logs nanti)
-    console.log(">>> REQUEST MASUK:", { kategoriId, search, showAll });
+    // Log Request untuk Debugging di Railway
+    console.log("🔥 REQUEST GET PRODUCTS:", { kategoriId, search, showAll });
 
-    // 2. BANGUN QUERY SECARA DINAMIS (Cara paling aman)
+    // Bangun Query Filter Secara Manual (Lebih Aman)
     const filterQuery = {};
 
-    // Logic: Kalau showAll BUKAN 'true', maka paksa filter aktif = true.
-    // Kalau showAll == 'true', filter ini jangan dimasukkan sama sekali.
+    // Logic Status:
+    // Jika Admin minta showAll='true', jangan filter aktif (tampilkan semua).
+    // Jika tidak, paksa hanya tampilkan yang aktif = true.
     if (showAll !== 'true') {
       filterQuery.aktif = true;
     }
 
+    // Logic Kategori
     if (kategoriId) {
       filterQuery.id_kategori = parseInt(kategoriId);
     }
 
+    // Logic Search
     if (search) {
       filterQuery.nama_produk = { contains: search };
     }
 
-    console.log(">>> FILTER DATABASE:", filterQuery);
+    console.log("🔥 FILTER DATABASE:", filterQuery);
 
-    // 3. EKSEKUSI PRISMA
     const products = await prisma.produk.findMany({
-      where: filterQuery, // Masukkan object yang kita susun tadi
+      where: filterQuery,
       include: {
         kategori: true,
         daftar_varian: true
@@ -50,7 +65,7 @@ exports.getProducts = async (req, res) => {
   }
 };
 
-// AMBIL DETAIL PRODUK
+// AMBIL DETAIL SATU PRODUK
 exports.getProductDetail = async (req, res) => {
   try {
     const { id } = req.params;
@@ -64,7 +79,7 @@ exports.getProductDetail = async (req, res) => {
   }
 };
 
-// AMBIL SEMUA KATEGORI (Untuk Menu Frontend)
+// AMBIL LIST KATEGORI
 exports.getCategories = async (req, res) => {
   try {
     const categories = await prisma.kategori.findMany();
@@ -74,35 +89,27 @@ exports.getCategories = async (req, res) => {
   }
 };
 
-// Tambahan di productController.js
-const cloudinary = require('cloudinary').v2;
-const fs = require('fs');
+// ==========================================
+// 2. ADMIN API (CRUD Produk)
+// ==========================================
 
-// Konfigurasi Cloudinary (Dapat dari Dashboard Cloudinary nanti)
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-});
-
+// UPLOAD GAMBAR KE CLOUDINARY
 exports.uploadImage = async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'Tidak ada file yang diupload.' });
     }
 
-    // Upload ke Cloudinary
     const result = await cloudinary.uploader.upload(req.file.path, {
-      folder: 'grosir-products', // Nama folder di Cloudinary
+      folder: 'grosir-products',
     });
 
-    // Hapus file temporary di server local (supaya server gak penuh)
+    // Hapus file sampah di server (biar storage aman)
     fs.unlinkSync(req.file.path);
 
-    // Kembalikan URL ke Frontend
     res.json({
       success: true,
-      url: result.secure_url // URL ini nanti disimpan Frontend saat create product
+      url: result.secure_url
     });
 
   } catch (error) {
@@ -110,9 +117,7 @@ exports.uploadImage = async (req, res) => {
   }
 };
 
-// === FITUR ADMIN: KELOLA PRODUK ===
-
-// 1. TAMBAH PRODUK BARU (Create)
+// TAMBAH PRODUK BARU
 exports.createProduct = async (req, res) => {
   try {
     const { 
@@ -120,23 +125,19 @@ exports.createProduct = async (req, res) => {
       deskripsi, 
       id_kategori, 
       url_gambar, 
-      varian // Array: [{ name: "Pcs", price: 3000, barcode: "123" }, ...]
+      varian 
     } = req.body;
 
-    // Validasi input
     if (!varian || varian.length === 0) {
-      return res.status(400).json({ message: "Minimal harus ada 1 varian satuan (misal: Pcs)." });
+      return res.status(400).json({ message: "Minimal harus ada 1 varian satuan." });
     }
 
-    // Gunakan Nested Write Prisma (Simpan Induk + Anak sekaligus)
     const newProduct = await prisma.produk.create({
       data: {
         nama_produk,
         deskripsi,
         url_gambar,
-        // Hubungkan ke kategori
         kategori: { connect: { id: parseInt(id_kategori) } },
-        // Buat varian sekaligus
         daftar_varian: {
           create: varian.map(v => ({
             nama_satuan: v.name,
@@ -145,7 +146,7 @@ exports.createProduct = async (req, res) => {
           }))
         }
       },
-      include: { daftar_varian: true } // Return data lengkap biar frontend langsung update
+      include: { daftar_varian: true }
     });
 
     res.status(201).json({ success: true, message: "Produk berhasil dibuat!", data: newProduct });
@@ -155,7 +156,7 @@ exports.createProduct = async (req, res) => {
   }
 };
 
-// 2. UPDATE PRODUK
+// UPDATE DATA PRODUK UTAMA
 exports.updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
@@ -167,7 +168,7 @@ exports.updateProduct = async (req, res) => {
         nama_produk,
         deskripsi,
         url_gambar,
-        aktif, // Bisa set false untuk sembunyikan produk
+        aktif,
         id_kategori: id_kategori ? parseInt(id_kategori) : undefined
       }
     });
@@ -178,11 +179,10 @@ exports.updateProduct = async (req, res) => {
   }
 };
 
-// 3. UPDATE HARGA/VARIAN (Case Khusus)
-// Disarankan pisah endpoint biar aman. Ini untuk tambah/edit varian.
+// UPDATE HARGA VARIAN
 exports.updateVariant = async (req, res) => {
   try {
-    const { id, price, barcode } = req.body; // ID VarianSatuan
+    const { id, price, barcode } = req.body;
     
     const updatedVariant = await prisma.varianSatuan.update({
       where: { id: parseInt(id) },
@@ -197,50 +197,8 @@ exports.updateVariant = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-// src/controllers/productController.js
 
-// AMBIL SEMUA PRODUK (Filter Kategori & Search)
-exports.getProducts = async (req, res) => {
-  try {
-    // Ambil parameter dari URL
-    // Contoh: ?kategoriId=1&search=soto
-    const { kategoriId, search } = req.query; 
-
-    const products = await prisma.produk.findMany({
-      where: {
-        aktif: true, // Selalu hanya tampilkan yang aktif
-        
-        // 1. Filter Kategori (Jika ada yang dipilih)
-        id_kategori: kategoriId ? parseInt(kategoriId) : undefined,
-        
-        // 2. Filter Pencarian (Jika user mengetik sesuatu)
-        nama_produk: search ? { 
-          contains: search // Mencari text yang mengandung kata kunci
-        } : undefined
-      },
-      include: {
-        kategori: true,
-        daftar_varian: true
-      },
-      orderBy: {
-        nama_produk: 'asc' // Urutkan A-Z biar rapi
-      }
-    });
-
-    res.json({
-      success: true,
-      count: products.length, // Info ada berapa hasil ditemukan
-      data: products
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-
-// 4. HAPUS PRODUK (Soft Delete)
-// Kita tidak benar-benar menghapus dari DB supaya riwayat pesanan aman.
-// Kita cuma set aktif = false.
+// HAPUS PRODUK (Soft Delete)
 exports.deleteProduct = async (req, res) => {
   try {
     const { id } = req.params;
@@ -255,4 +213,3 @@ exports.deleteProduct = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-
