@@ -80,15 +80,17 @@ exports.calculateCart = async (req, res) => {
 
     // --- CCTV 2: LIHAT HASIL AKHIR ---
     console.log(`🚀 [RESULT] Subtotal Akhir: ${subTotal}`);
+    const grandTotal = subTotal + finalShippingCost;
 
     res.json({
       success: true,
       subTotal: subTotal, // Pastikan ini terkirim
+      shippingCost: finalShippingCost,
+      grandTotal,
       canCheckout,
       availableShipping,
       availablePayments,
       isFreeShipping,
-      shippingCost: finalShippingCost,
       messages: {
         error: subTotal < minBelanja ? `Min. belanja Rp ${minBelanja.toLocaleString()}` : null,
         info: isVip ? "VIP Member!" : null
