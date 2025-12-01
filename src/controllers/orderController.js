@@ -59,7 +59,10 @@ exports.calculateCart = async (req, res) => {
       availableShipping.push("DIANTAR");
     }
 
-    const isFreeShipping = isVip; 
+    const ONGIR_DEFAULT = 15000; // Harusnya ambil dari DB PengaturanToko, tapi hardcode dulu oke.
+    const isFreeShipping = isVip;
+
+    const finalShippingCost = isFreeShipping ? 0 : ONGIR_DEFAULT;
 
     res.json({
       success: true,
@@ -68,6 +71,7 @@ exports.calculateCart = async (req, res) => {
       availableShipping,
       availablePayments,
       isFreeShipping,
+      shippingCost: finalShippingCost,
       messages: {
         error: subTotal < minBelanja ? `Minimal belanja Rp ${minBelanja.toLocaleString()}` : null,
         info: isVip ? "Anda Pelanggan VIP! Bebas Ongkir." : null
