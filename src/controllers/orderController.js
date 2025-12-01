@@ -1,57 +1,72 @@
 const prisma = require('../config/prisma');
 
 // HITUNG TOTAL BELANJA (CART CALCULATION)
+// orderController.js
+
 exports.calculateCart = async (req, res) => {
   try {
     const { items } = req.body; 
     const userId = req.user.id; 
 
-    // 1. Cek Status VIP User (DENGAN PENGAMAN)
+    // --- CCTV 1: LIHAT APA YANG DIKIRIM FRONTEND ---
+    console.log("📦 [DEBUG] Items dari Frontend:", JSON.stringify(items, null, 2));
+
     const user = await prisma.pengguna.findUnique({ where: { id: userId } });
-    
-    // --- TAMBAHAN PENGAMAN ---
-    if (!user) {
-        // Kalau user gak ketemu di DB (misal habis reset DB), jangan crash!
-        // Anggap saja user biasa (bukan VIP)
-        console.log("⚠️ Warning: User ID dari token tidak ditemukan di DB.");
-    }
-    
-    // Kalau user null, isVip otomatis false.
+    if (!user) console.log("⚠️ Warning: User ID token tidak ada di DB.");
     const isVip = user ? user.is_vip : false; 
-    // -------------------------
 
     let subTotal = 0;
     
-    // 2. HITUNG HARGA (Logika Grosir)
+    // 2. HITUNG HARGA
     for (const item of items) {
+      // --- PEMBERSIH DATA: PAKSA JADI ANGKA ---
+      // Biar kalau frontend kirim string "114", kita ubah jadi angka 114
+      const variantIdFix = parseInt(item.variantId);
+      const qtyFix = parseInt(item.quantity || item.qty); // Jaga-jaga nama variabel beda
+
+      if (isNaN(variantIdFix)) {
+          console.log("❌ [SKIP] Item ini error, ID Varian bukan angka:", item);
+          continue; 
+      }
+
       const variant = await prisma.varianSatuan.findUnique({
-        where: { id: item.variantId },
+        where: { id: variantIdFix }, // Pakai ID yang sudah difix
         include: { daftar_grosir: true }
       });
 
       if (variant) {
-        let hargaFinal = variant.harga; 
+        let hargaFinal = Number(variant.harga); // Pastikan angka
 
+        // Logika Grosir
         if (variant.daftar_grosir && variant.daftar_grosir.length > 0) {
            const rules = variant.daftar_grosir.sort((a, b) => b.min_qty - a.min_qty);
            for (const rule of rules) {
-             if (item.qty >= rule.min_qty) {
-               hargaFinal = rule.harga_potongan;
+             if (qtyFix >= rule.min_qty) {
+               hargaFinal = Number(rule.harga_potongan);
+               console.log(`✨ [GROSIR] Dapat harga potongan: ${hargaFinal}`);
                break; 
              }
            }
         }
-        subTotal += hargaFinal * item.qty;
+        
+        const totalPerItem = hargaFinal * qtyFix;
+        console.log(`✅ [HITUNG] ${variant.nama_satuan} | Rp ${hargaFinal} x ${qtyFix} = Rp ${totalPerItem}`);
+        
+        subTotal += totalPerItem;
+      } else {
+          console.log(`❌ [NOT FOUND] Varian ID ${variantIdFix} tidak ditemukan di Database!`);
       }
     }
 
-    // 3. LOGIKA MINIMAL BELANJA (Masih Hardcode dulu gapapa)
+    // --- SAFETY CHECK: JANGAN SAMPAI NULL ---
+    if (isNaN(subTotal)) subTotal = 0;
+
+    // 3. LOGIKA MINIMAL BELANJA
     const minBelanja = 250000;
     const minDelivery = 500000; 
 
     let canCheckout = subTotal >= minBelanja;
     
-    // 4. ATURAN PENGIRIMAN
     let availablePayments = ["TRANSFER"]; 
     let availableShipping = ["AMBIL_SENDIRI"];
     
@@ -59,27 +74,29 @@ exports.calculateCart = async (req, res) => {
       availableShipping.push("DIANTAR");
     }
 
-    const ONGIR_DEFAULT = 15000; // Harusnya ambil dari DB PengaturanToko, tapi hardcode dulu oke.
-    const isFreeShipping = isVip;
-
+    const ONGIR_DEFAULT = 15000;
+    const isFreeShipping = isVip; 
     const finalShippingCost = isFreeShipping ? 0 : ONGIR_DEFAULT;
+
+    // --- CCTV 2: LIHAT HASIL AKHIR ---
+    console.log(`🚀 [RESULT] Subtotal Akhir: ${subTotal}`);
 
     res.json({
       success: true,
-      subTotal,
+      subTotal: subTotal, // Pastikan ini terkirim
       canCheckout,
       availableShipping,
       availablePayments,
       isFreeShipping,
       shippingCost: finalShippingCost,
       messages: {
-        error: subTotal < minBelanja ? `Minimal belanja Rp ${minBelanja.toLocaleString()}` : null,
-        info: isVip ? "Anda Pelanggan VIP! Bebas Ongkir." : null
+        error: subTotal < minBelanja ? `Min. belanja Rp ${minBelanja.toLocaleString()}` : null,
+        info: isVip ? "VIP Member!" : null
       }
     });
 
   } catch (error) {
-    console.error("❌ ERROR CALCULATE CART:", error); // Biar muncul di terminal
+    console.error("❌ ERROR CALCULATE CART:", error);
     res.status(500).json({ message: error.message });
   }
 };
