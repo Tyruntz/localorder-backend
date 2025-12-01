@@ -4,66 +4,61 @@ const prisma = require('../config/prisma');
 exports.calculateCart = async (req, res) => {
   try {
     const { items } = req.body; 
-    const userId = req.user.id; // Ambil ID user dari token
+    const userId = req.user.id; 
 
-    // 1. Cek Status VIP User
+    // 1. Cek Status VIP User (DENGAN PENGAMAN)
     const user = await prisma.pengguna.findUnique({ where: { id: userId } });
-    const isVip = user.is_vip; // True/False
+    
+    // --- TAMBAHAN PENGAMAN ---
+    if (!user) {
+        // Kalau user gak ketemu di DB (misal habis reset DB), jangan crash!
+        // Anggap saja user biasa (bukan VIP)
+        console.log("⚠️ Warning: User ID dari token tidak ditemukan di DB.");
+    }
+    
+    // Kalau user null, isVip otomatis false.
+    const isVip = user ? user.is_vip : false; 
+    // -------------------------
 
     let subTotal = 0;
     
     // 2. HITUNG HARGA (Logika Grosir)
     for (const item of items) {
-      // Ambil data varian DAN aturan grosirnya
       const variant = await prisma.varianSatuan.findUnique({
         where: { id: item.variantId },
         include: { daftar_grosir: true }
       });
 
       if (variant) {
-        let hargaFinal = variant.harga; // Default harga normal (5000)
+        let hargaFinal = variant.harga; 
 
-        // Cek apakah jumlah beli memenuhi syarat grosir
-        // Cari aturan grosir yang quantity-nya terpenuhi, ambil yang paling murah
-        // Contoh: Beli 10. Ada aturan Min 3 (@4500) dan Min 12 (@4000).
-        // Karena 10 >= 3 tapi 10 < 12, maka pakai 4500.
-        
         if (variant.daftar_grosir && variant.daftar_grosir.length > 0) {
-           // Urutkan dari min_qty terbesar ke terkecil
            const rules = variant.daftar_grosir.sort((a, b) => b.min_qty - a.min_qty);
-           
            for (const rule of rules) {
              if (item.qty >= rule.min_qty) {
                hargaFinal = rule.harga_potongan;
-               break; // Ketemu aturan yang cocok, stop checking
+               break; 
              }
            }
         }
-
         subTotal += hargaFinal * item.qty;
       }
     }
 
-    // 3. LOGIKA MINIMAL BELANJA (Revisi Tuan Toko)
-    // "Minimal 250k untuk diproses"
+    // 3. LOGIKA MINIMAL BELANJA (Masih Hardcode dulu gapapa)
     const minBelanja = 250000;
-    const minDelivery = 500000; // Contoh: di atas 500rb baru boleh delivery
+    const minDelivery = 500000; 
 
     let canCheckout = subTotal >= minBelanja;
     
-    // 4. ATURAN PENGIRIMAN & PEMBAYARAN
-    // Pembayaran: HANYA TRANSFER (Sesuai Memo)
+    // 4. ATURAN PENGIRIMAN
     let availablePayments = ["TRANSFER"]; 
-
     let availableShipping = ["AMBIL_SENDIRI"];
     
-    // Logic Delivery
     if (subTotal >= minDelivery) {
       availableShipping.push("DIANTAR");
     }
 
-    // Logic Ongkir Gratis (VIP atau Jarak Dekat)
-    // Info ini dikirim ke frontend biar frontend tau user ini VIP atau bukan
     const isFreeShipping = isVip; 
 
     res.json({
@@ -72,7 +67,7 @@ exports.calculateCart = async (req, res) => {
       canCheckout,
       availableShipping,
       availablePayments,
-      isFreeShipping, // Flag buat frontend: Kalau true, set ongkir = 0
+      isFreeShipping,
       messages: {
         error: subTotal < minBelanja ? `Minimal belanja Rp ${minBelanja.toLocaleString()}` : null,
         info: isVip ? "Anda Pelanggan VIP! Bebas Ongkir." : null
@@ -80,6 +75,7 @@ exports.calculateCart = async (req, res) => {
     });
 
   } catch (error) {
+    console.error("❌ ERROR CALCULATE CART:", error); // Biar muncul di terminal
     res.status(500).json({ message: error.message });
   }
 };
