@@ -11,6 +11,7 @@ const productController = require('../controllers/productController');
 const orderController = require('../controllers/orderController');
 const adminMiddleware = require('../middleware/adminMiddleware');
 const reportController = require('../controllers/reportController');
+const addressController = require('../controllers/addressController');
 
 // === AUTH ===
 router.post('/auth/login', authController.login);
@@ -49,5 +50,14 @@ router.delete('/admin/products/:id', authenticateToken, adminMiddleware, product
 
 // Dashboard Report (Omset & Stats)
 router.get('/admin/dashboard-stats', authenticateToken, adminMiddleware, reportController.getDashboardStats);
+
+// === WILAYAH & ALAMAT ===
+// Public (Bisa diakses siapa saja buat liat daftar kecamatan)
+router.get('/wilayah', addressController.getWilayah);
+
+// Private (Harus Login)
+router.get('/addresses', authenticateToken, addressController.getMyAddresses);
+router.post('/addresses', authenticateToken, addressController.addAddress);
+router.put('/addresses/set-primary', authenticateToken, addressController.setPrimaryAddress);
 
 module.exports = router;
