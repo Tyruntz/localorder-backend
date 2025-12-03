@@ -12,7 +12,6 @@ const orderController = require('../controllers/orderController');
 const adminMiddleware = require('../middleware/adminMiddleware');
 const reportController = require('../controllers/reportController');
 const addressController = require('../controllers/addressController');
-const orderController = require('../controllers/orderController');
 
 // === AUTH ===
 router.post('/auth/login', authController.login);
