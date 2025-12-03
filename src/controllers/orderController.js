@@ -213,6 +213,50 @@ exports.createOrder = async (req, res) => {
   }
 };
 
+// ==========================================
+// 3. AMBIL RIWAYAT PESANAN SAYA (USER LOGGED IN)
+// ==========================================
+exports.getMyOrders = async (req, res) => {
+  try {
+    const userId = req.user.id; // Didapat dari middleware authenticateToken
+
+    const myOrders = await prisma.pesanan.findMany({
+      where: { 
+        id_pengguna: userId // KUNCI: Cuma ambil punya user ini
+      },
+      // Kita ambil detail item-nya sekalian biar bisa ditampilkan di frontend
+      include: {
+        daftar_item: {
+          include: {
+            varian: {
+              include: {
+                produk: {
+                  select: {
+                    nama_produk: true,
+                    url_gambar: true // Biar bisa nampilin gambar kecil di list transaksi
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      orderBy: {
+        dibuat_pada: 'desc' // Yang paling baru muncul paling atas
+      }
+    });
+
+    res.json({
+      success: true,
+      data: myOrders
+    });
+
+  } catch (error) {
+    console.error("Gagal ambil history:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // === FITUR ADMIN (LENGKAP) ===
 
 // 1. AMBIL SEMUA PESANAN (Optimized Query)

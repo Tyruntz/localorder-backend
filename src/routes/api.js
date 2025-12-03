@@ -12,6 +12,7 @@ const orderController = require('../controllers/orderController');
 const adminMiddleware = require('../middleware/adminMiddleware');
 const reportController = require('../controllers/reportController');
 const addressController = require('../controllers/addressController');
+const orderController = require('../controllers/orderController');
 
 // === AUTH ===
 router.post('/auth/login', authController.login);
@@ -29,6 +30,8 @@ router.post('/products/upload', authenticateToken, upload.single('image'), produ
 // === ORDERS ===
 router.post('/cart/calculate', authenticateToken, orderController.calculateCart);
 router.post('/orders', authenticateToken, orderController.createOrder);
+// TAMBAHKAN INI 👇
+router.get('/orders/history', authenticateToken, orderController.getMyOrders);
 
 // === ADMIN ROUTES ===
 // Harus Login (authenticateToken) DAN harus Admin (adminMiddleware)
