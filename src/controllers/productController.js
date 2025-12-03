@@ -172,28 +172,73 @@ exports.createProduct = async (req, res) => {
 };
 
 // UPDATE DATA PRODUK UTAMA
+// src/controllers/productController.js
+
+// ... (kode lain) ...
+
 exports.updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const { nama_produk, deskripsi, id_kategori, url_gambar, aktif } = req.body;
+    const { 
+      nama_produk, 
+      deskripsi, 
+      kategori_id, 
+      url_gambar, 
+      aktif,
+      variants // <--- Kita terima array varian lengkap dari frontend
+    } = req.body;
 
-    const updatedProduct = await prisma.produk.update({
-      where: { id: parseInt(id) },
-      data: {
-        nama_produk,
-        deskripsi,
-        url_gambar,
-        aktif,
-        id_kategori: id_kategori ? parseInt(id_kategori) : undefined
+    // Gunakan Transaction supaya aman (Kalau satu gagal, semua batal)
+    await prisma.$transaction(async (tx) => {
+      
+      // 1. Update Data Utama Produk
+      await tx.produk.update({
+        where: { id: parseInt(id) },
+        data: {
+          nama_produk,
+          deskripsi,
+          id_kategori: parseInt(kategori_id),
+          url_gambar,
+          aktif
+        }
+      });
+
+      // 2. LOGIKA REPLACE VARIAN:
+      // A. Hapus semua varian lama milik produk ini
+      // (Cascading delete akan otomatis menghapus harga grosir terkait)
+      await tx.varianSatuan.deleteMany({
+        where: { id_produk: parseInt(id) }
+      });
+
+      // B. Buat ulang varian baru sesuai data form
+      if (variants && variants.length > 0) {
+        for (const v of variants) {
+          await tx.varianSatuan.create({
+            data: {
+              id_produk: parseInt(id),
+              nama_satuan: v.satuan,
+              harga: parseInt(v.harga),
+              barcode: v.barcode || null,
+              // Langsung simpan harga grosir jika ada
+              daftar_grosir: {
+                create: v.grosir?.map(g => ({
+                  min_qty: parseInt(g.min_qty),
+                  harga_potongan: parseInt(g.harga_potongan)
+                })) || []
+              }
+            }
+          });
+        }
       }
     });
 
-    res.json({ success: true, message: "Info produk diperbarui", data: updatedProduct });
+    res.json({ success: true, message: "Produk dan varian berhasil diperbarui!" });
+
   } catch (error) {
+    console.error("Gagal update produk:", error);
     res.status(500).json({ message: error.message });
   }
 };
-
 // UPDATE HARGA VARIAN
 exports.updateVariant = async (req, res) => {
   try {
