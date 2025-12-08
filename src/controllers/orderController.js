@@ -339,3 +339,57 @@ exports.updateOrderStatus = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// USER MEMBATALKAN PESANAN
+exports.cancelOrderUser = async (req, res) => {
+  try {
+    const { id } = req.params; // ID Pesanan
+    const userId = req.user.id; // ID User yang login
+    const { alasan } = req.body;
+
+    // 1. Cari Pesanan
+    const order = await prisma.pesanan.findUnique({
+      where: { id: parseInt(id) },
+      include: { daftar_item: true }
+    });
+
+    if (!order) {
+      return res.status(404).json({ message: "Pesanan tidak ditemukan." });
+    }
+
+    // 2. Validasi Pemilik
+    if (order.id_pengguna !== userId) {
+      return res.status(403).json({ message: "Anda tidak berhak membatalkan pesanan ini." });
+    }
+
+    // 3. Validasi Status (Hanya boleh batal kalau belum dikirim)
+    // Sesuaikan aturan toko: Apakah 'DIPROSES' boleh batal?
+    // Misal: Boleh batal selama belum 'DIKIRIM' atau 'SELESAI'
+    if (['DIKIRIM', 'SELESAI', 'BATAL'].includes(order.status)) {
+      return res.status(400).json({ message: "Pesanan tidak dapat dibatalkan karena sudah diproses lanjut." });
+    }
+
+    // 4. Update Status Jadi BATAL
+    const updatedOrder = await prisma.pesanan.update({
+      where: { id: parseInt(id) },
+      data: {
+        status: 'BATAL',
+        catatan_admin: `Dibatalkan oleh user. Alasan: ${alasan || '-'}`
+      }
+    });
+
+    // 5. (Opsional) Kembalikan Stok (Re-stocking Logic)
+    // Kalau backend ini memotong stok, lakukan loop update stok di sini.
+    // Karena stok ada di kasir toko, kita skip langkah ini. Cukup notifikasi Admin.
+
+    res.json({
+      success: true,
+      message: "Pesanan berhasil dibatalkan.",
+      data: updatedOrder
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message });
+  }
+};

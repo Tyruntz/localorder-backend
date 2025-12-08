@@ -31,6 +31,7 @@ router.post('/cart/calculate', authenticateToken, orderController.calculateCart)
 router.post('/orders', authenticateToken, orderController.createOrder);
 // TAMBAHKAN INI 👇
 router.get('/orders/history', authenticateToken, orderController.getMyOrders);
+router.patch('/orders/:id/cancel', authenticateToken, orderController.cancelOrderUser);
 
 // === ADMIN ROUTES ===
 // Harus Login (authenticateToken) DAN harus Admin (adminMiddleware)
