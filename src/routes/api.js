@@ -36,7 +36,7 @@ router.patch('/orders/:id/cancel', authenticateToken, orderController.cancelOrde
 // === ADMIN ROUTES ===
 // Harus Login (authenticateToken) DAN harus Admin (adminMiddleware)
 router.get('/admin/orders', authenticateToken, adminMiddleware, orderController.getAllOrdersAdmin);
-router.patch('/admin/orders/:id', authenticateToken, adminMiddleware, orderController.updateOrderStatus);
+router.put('/admin/orders/:id', authenticateToken, adminMiddleware, orderController.updateOrderStatus);
 
 // === ADMIN ROUTES (CRUD PRODUK) ===
 // Create
